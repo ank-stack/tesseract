@@ -1,4 +1,5 @@
 fastapi
 uvicorn
+easyocr
 pillow
-pytesseract
+numpy
