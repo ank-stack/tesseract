@@ -1,43 +1,46 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import base64, io
+import base64
+from io import BytesIO
 from PIL import Image
-import pytesseract
+import easyocr
+import numpy as np
 
 app = FastAPI()
 
-# allow your laptop to call it from anywhere
+# Allow all origins for testing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
+# Initialize EasyOCR reader (English only to keep it light)
+reader = easyocr.Reader(['en'], gpu=False)
+
 @app.get("/")
-def home():
-    return {"status": "API running"}
+async def root():
+    return {"status": "ok", "message": "EasyOCR API is running!"}
 
 @app.post("/upload")
-async def upload(req: Request):
-    """
-    Receives JSON: {"image": "<base64 image>"}
-    Returns: {"text": "<ocr result>"}
-    """
+async def upload_image(request: Request):
     try:
-        data = await req.json()
-        if "image" not in data:
-            return JSONResponse({"error": "Missing 'image' field"}, status_code=400)
+        data = await request.json()
+        image_data = data.get("image")
+        if not image_data:
+            return {"error": "No image provided."}
 
-        # decode base64 → image
-        img_bytes = base64.b64decode(data["image"])
-        img = Image.open(io.BytesIO(img_bytes))
+        # Decode base64 to image
+        image_bytes = base64.b64decode(image_data)
+        img = Image.open(BytesIO(image_bytes))
 
-        # OCR
-        text = pytesseract.image_to_string(img, lang="eng")
+        # Run OCR
+        result = reader.readtext(np.array(img), detail=0)
+        text = "\n".join(result)
 
-        return {"text": text.strip()}
+        return {"text": text}
 
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return {"error": str(e)}
